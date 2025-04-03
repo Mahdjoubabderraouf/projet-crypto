@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Security
+from fastapi import FastAPI, HTTPException, Security, Depends
 from charm.toolbox.pairinggroup import PairingGroup
 from fastapi.security import APIKeyHeader
 from auth import get_api_key_dependency
@@ -15,7 +15,7 @@ group = PairingGroup('SS512')
 
 ibe = IBEService(group)
 params = ibe.load_params_from_env()
-params = ibe.deserialize(params)
+master_key = ibe.load_master_key_from_env()
 
 app = FastAPI()
 
@@ -28,7 +28,7 @@ async def generate_key(
     if api_key != os.getenv("PKG_API_KEY"):
         raise HTTPException(403, detail="Invalid API key")
     
-    private_key = ibe.extract_key(request.user_id)
+    private_key = ibe.extract_key(params,request.user_id, master_key)
     return {
         "user_id": request.user_id,
         "private_key": ibe.serialize_key(private_key)
@@ -52,14 +52,33 @@ async def encrypt_message(
         raise HTTPException(400, detail=str(e))
 
 @app.post("/decrypt")
-async def decrypt_message(
-    request: DecryptRequest,
-):
+async def decrypt_message(request: DecryptRequest):
     try:
-        decrypted = ibe.decrypt(request.ciphertext, request.private_key)
-        return {"message": decrypted}
+        # Deserialize the private key
+        private_key = ibe.deserialize_key(request.private_key)
+        
+        # Deserialize ciphertext components
+        A = ibe.deserialize(request.ciphertext.A)
+        B = ibe.deserialize(request.ciphertext.B)
+        C = [ibe.deserialize(c) for c in request.ciphertext.C]
+        
+        # Perform decryption
+        decrypted = ibe.decrypt(params, {
+            'A': A,
+            'B': B,
+            'C': C
+        }, private_key)
+        
+        # Serialize the result before returning
+        return {
+            "decrypted": ibe.serialize(decrypted),  # Convert to base64 string
+            "status": "success"
+        }
     except ValueError as e:
-        raise HTTPException(400, detail=str(e))
+        raise HTTPException(400, detail="Decryption failed")
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(500, detail="Internal server error")    
     
     
 if __name__ == "__main__":

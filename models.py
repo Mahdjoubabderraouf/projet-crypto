@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import List
 
 class KeyRequest(BaseModel):
     user_id: str
@@ -10,7 +11,16 @@ class APIKeyRequest(BaseModel):
 class EncryptRequest(BaseModel):
     recipient_id: str
     message: str
+    
+
+class CiphertextModel(BaseModel):
+    A: str
+    B: str
+    C: List[str]
+
+class PrivateKeyModel(BaseModel):
+    List[str]
 
 class DecryptRequest(BaseModel):
-    ciphertext: dict
-    private_key: dict  # Serialized private key
+    ciphertext: CiphertextModel
+    private_key: PrivateKeyModel
