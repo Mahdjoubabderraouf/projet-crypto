@@ -27,6 +27,9 @@ def main():
     
     # Extract a private key for the given identity
     private_key = ibe.extract_key(params, user_id, master_key)
+    
+    print(f"private key is {private_key}")
+    
     serialized_private_key = ibe.serialize_key(private_key)
     
     print(f"Private key generated for {user_id}:")
@@ -61,7 +64,7 @@ def main():
     # Decrypt the message using the private key
     print("Decrypting message with private key...")
     deserialized_key = ibe.deserialize_key(serialized_private_key)
-    decrypted_message = ibe.decrypt(params, cipher_text, deserialized_key)
+    decrypted_message = ibe.decrypt(params, deserialized_key, cipher_text)
     
     print("Decrypted message (GT element):", ibe.serialize(decrypted_message))
     
@@ -71,15 +74,6 @@ def main():
     else:
         print("Error: Decryption failed to recover the original message.")
         
- # Retrieve the original message from the ciphertext
-    retrieved_original_message = cipher_text['original_message']
-    print("Retrieved original message:", retrieved_original_message)
-    
-    # Verify the decryption succeeded
-    if decrypted_message == message and retrieved_original_message == original_message:
-        print("Success! Decryption recovered the original message.")
-    else:
-        print("Error: Decryption failed to recover the original message.")
 
     
     

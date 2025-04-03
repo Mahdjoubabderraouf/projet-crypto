@@ -1,8 +1,7 @@
-from charm.toolbox.pairinggroup import PairingGroup, ZR, G1, G2, GT, pair
+from charm.toolbox.pairinggroup import PairingGroup,ZR,G1,G2,GT,pair
 from charm.toolbox.hash_module import Waters,Hash
-
-from charm.core.engine.util import objectToBytes, bytesToObject
 import hashlib
+from charm.core.engine.util import objectToBytes, bytesToObject
 
 import base64
 import os
@@ -37,7 +36,7 @@ class IBEService:
         g1 = g**alpha # public 
 
         g2 = group.random(G2) # public
-        g2_alpha = g2 ** alpha # secret
+        g2_alpha = g2 ** alpha # public
 
         # Select a random hash function key from the family of hash functions
         k = group.random(ZR) 
@@ -57,12 +56,29 @@ class IBEService:
     
     def serialize(self, obj):
         """Serialize crypto objects for storage"""
-        return base64.b64encode(objectToBytes(obj,group)).decode('utf-8')
+        return base64.b64encode(objectToBytes(obj, group)).decode('utf-8')
 
     def deserialize(self, data):
         """Deserialize stored crypto objects"""
-        # If data is already a pairing Element, return it directly
         return bytesToObject(base64.b64decode(data.encode('utf-8')), group)
+    
+    def ensure_pairing_element(self, obj, element_type=G1):
+        """
+        Convert an integer or other value to a pairing element if needed
+        """
+        # Check if object already belongs to the group
+        # This is a more reliable method than checking the class type
+        if hasattr(obj, 'getGroupType') and obj.getGroupType() is not None:
+            # It's already a group element
+            return obj
+        # Try to convert to ZR first (for integers)
+        if isinstance(obj, int):
+            # Convert to ZR then to the target type
+            zr_elem = group.init(ZR, obj)
+            return group.init(element_type, zr_elem)
+        else:
+            # Try direct conversion
+            return group.init(element_type, obj)
     
     def serialize_response(self, obj):
         """Serialize crypto objects for API responses"""
@@ -81,37 +97,57 @@ class IBEService:
                 for dni in key_dict['dn']]
         }
 
-    def deserialize_key(self, key_dict):
-        """Convert serialized key back to crypto objects"""
-        # Handle both dictionary and model object inputs
-        if hasattr(key_dict, 'd0') and hasattr(key_dict, 'dn'):
-            # Input is an object with attributes (like PrivateKeyModel)
-            d0_data = key_dict.d0
-            dn_data = key_dict.dn
-        else:
-            # Input is a dictionary
-            d0_data = key_dict['d0']
-            dn_data = key_dict['dn']
-        
-        # Deserialize d0
-        if not isinstance(d0_data, str):
-            d0 = d0_data
-        else:
-            d0 = bytesToObject(base64.b64decode(d0_data.encode('utf-8')), group)
+    def deserialize_key(self, serialized_key):
+        """Convert serialized private key back to Charm Element objects"""
+        try:
+            # Deserialize d0 (main private key component)
+            d0_bytes = base64.b64decode(serialized_key['d0'])
+            d0 = bytesToObject(d0_bytes, group)
             
-        # Deserialize dn (list of elements)
-        dn = []
-        for dni_data in dn_data:
-            if not isinstance(dni_data, str):
-                dn.append(dni_data)
-            else:
-                dn.append(bytesToObject(base64.b64decode(dni_data.encode('utf-8')), group))
-        
-        return KeyObject(d0, dn)
+            # Deserialize dn components (delegated keys)
+            dn = []
+            for dni_b64 in serialized_key['dn']:
+                dni_bytes = base64.b64decode(dni_b64)
+                dni = bytesToObject(dni_bytes, group)
+                dn.append(dni)
+                
+            return {'d0': d0, 'dn': dn}
+            
+        except Exception as e:
+            raise ValueError(f"Failed to deserialize private key: {str(e)}")
+    
+    def extract_key(self, params, ID, master_key):
+        """
+        Key Generation algorithm for Boneh-Boyen Identity-Based Encryption.
+
+        Args:
+            params (dict): System parameters including public parameters.
+            ID (str): Identity string.
+            master_key (dict): Master secret key.
+
+        Returns:
+            dict: User secret key.
+        """
+
+        n = params['n']
+
+        #Hash identify to {0,1} based on group and length 'n'
+        a = self.hash_to_list(ID,n)
+
+        #Choose a random r form Zp
+        r = [group.random(ZR) for i in range(n)]
+
+        #First part of the private key 
+        hashID = master_key['g2_alpha']
+        for i in range(n):
+            hashID *= ((params['U'][i][int(a[i])])**r[i])
+
+        #Second part of private key
+        g_r = [params['g'] ** r[i] for i in range(n)]
+
+        return { 'd0':hashID, 'dn':g_r }
 
     def encrypt(self, params,ID, M):
-        
-        
         """
         Encryption algorithm for Boneh-Boyen Identity-Based Encryption.
 
@@ -127,8 +163,6 @@ class IBEService:
         e = params['e']
         g = params['g']
         U = params['U']
-        
-        print(e ,"this is e")
 
         #Hash identify to {0,1} based on group and length 'n'
         a = self.hash_to_list(ID,n)
@@ -144,55 +178,48 @@ class IBEService:
             C[i] = ((U[i][int(a[i])])**t)
 
         return {'A':A, 'B':B, 'C':C }
+    
 
-    def extract_key(self, params, ID, master_key):
-        n = params['n']
-        a = self.hash_to_list(ID, n)
-        
-        # Choose random r values for each position
-        r = [group.random(ZR) for i in range(n)]
-        
-        # First part of private key
-        hashID = master_key['g2_alpha']
-        for i in range(n):
-            hashID *= ((params['U'][i][int(a[i])])**r[i])
-        
-        # Second part of private key
-        g_r = [params['g'] ** r[i] for i in range(n)]
-        
-        return {'d0': hashID, 'dn': g_r}
+    def decrypt(self, params, dID, cipher_text):
+        """
+        Decryption algorithm for Boneh-Boyen Identity-Based Encryption.
 
-    def decrypt(self, params, cipher_text, dID):
-        result = 1
+        Args:
+            params (dict): System parameters including public parameters.
+            dID (dict): User secret key.
+            cipher_text (dict): Encrypted cipher text.
+
+        Returns:
+            GT: Decrypted message.
+        """
+        # Initialize result as identity element in GT
+        result = group.init(GT, 1)
         n = params['n']
+
+        # Parts of Cipher Text
+        A = cipher_text['A']
+        B = cipher_text['B']
+        C = cipher_text['C']
         
-        # Handle different input types
-        if hasattr(cipher_text, 'A'):
-            A = self.deserialize(cipher_text.A)
-            B = self.deserialize(cipher_text.B)
-            C = {i: self.deserialize(c) for i, c in enumerate(cipher_text.C)}
-        else:
-            A = cipher_text['A']
-            B = cipher_text['B']
-            C = cipher_text['C']
         
-        if isinstance(dID, KeyObject):
-            d0 = dID.d0
-            dn = dID.dn
-        elif hasattr(dID, 'd0') and hasattr(dID, 'dn'):
-            key_obj = self.deserialize_key(dID)
-            d0 = key_obj.d0
-            dn = key_obj.dn
-        else:
-            d0 = dID['d0']
-            dn = dID['dn']
+        # Ensure all elements are proper pairing elements
+        A = self.ensure_pairing_element(A, GT)
+        B = self.ensure_pairing_element(B, G1)
         
-        # Perform the multiple pairings
+        # Make sure each C element is a pairing element
         for i in range(n):
-            result *= pair(C[i], dn[i])
-        M = A * (result / pair(B, d0))
-        
+            C[i] = self.ensure_pairing_element(C[i], G1)
+            
+
+        # Operations for decrypted cipher text
+        for i in range(n):
+            result *= pair(C[i], dID['dn'][i])
+            
+        M = A * (result / pair(B, dID['d0']))
+
         return M
+
+    
     def hash_to_list(self,strID,n):
         """
         Hashing Algorithm for "a" list

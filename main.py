@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Security, Depends
-from charm.toolbox.pairinggroup import PairingGroup
+from charm.toolbox.pairinggroup import PairingGroup,ZR,G1,G2,GT,pair
 from fastapi.security import APIKeyHeader
 from auth import get_api_key_dependency
 import os
@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 from models import KeyRequest, APIKeyRequest, EncryptRequest, DecryptRequest
 from ibe_service import IBEService
+from gt_module import convert_text_to_gt, convert_gt_to_text
 
 
 # Load environment
@@ -39,7 +40,11 @@ async def encrypt_message(
     request: EncryptRequest,
 ):  
     try:
-        c=ibe.encrypt(params, request.recipient_id, request.message)
+        
+        M_gt= convert_text_to_gt(request.message)
+
+        
+        c=ibe.encrypt(params, request.recipient_id, M_gt['gt_element'])
         return{
             "ciphertext": {
                 "A": ibe.serialize(c['A']),
@@ -52,9 +57,12 @@ async def encrypt_message(
 
 @app.post("/decrypt")
 async def decrypt_message(request: DecryptRequest):
-    try:
+    
         # Deserialize the private key
-        private_key = ibe.deserialize_key(request.private_key)
+        private_key_dict = request.private_key.dict()  # Convert to dict
+        private_key = ibe.deserialize_key(private_key_dict)
+        
+        print("private_key", private_key)
         
         # Deserialize ciphertext components
         A = ibe.deserialize(request.ciphertext.A)
@@ -62,24 +70,20 @@ async def decrypt_message(request: DecryptRequest):
         C = [ibe.deserialize(c) for c in request.ciphertext.C]
         
         # Perform decryption
-        decrypted = ibe.decrypt(params, {
+        decrypted = ibe.decrypt(params, private_key, {
             'A': A,
             'B': B,
             'C': C
-        }, private_key)
+        })
+        
         
         # Serialize the result before returning
         return {
             "decrypted": ibe.serialize(decrypted),  # Convert to base64 string
             "status": "success"
         }
-    except ValueError as e:
-        raise HTTPException(400, detail="Decryption failed")
-    except Exception as e:
-        print(f"Error: {e}")
-        raise HTTPException(500, detail="Internal server error")    
-    
-    
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

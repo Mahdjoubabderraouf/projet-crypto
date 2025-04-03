@@ -19,7 +19,8 @@ class CiphertextModel(BaseModel):
     C: List[str]
 
 class PrivateKeyModel(BaseModel):
-    List[str]
+    d0 : str
+    dn : List[str]
 
 class DecryptRequest(BaseModel):
     ciphertext: CiphertextModel
