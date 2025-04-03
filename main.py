@@ -14,8 +14,7 @@ load_dotenv()
 group = PairingGroup('SS512')
 
 ibe = IBEService(group)
-params = ibe.load_params_from_env()
-master_key = ibe.load_master_key_from_env()
+params, master_key = ibe.setup()
 
 app = FastAPI()
 
@@ -40,7 +39,7 @@ async def encrypt_message(
     request: EncryptRequest,
 ):  
     try:
-        c=ibe.encrypt(request.recipient_id, params, request.message)
+        c=ibe.encrypt(params, request.recipient_id, request.message)
         return{
             "ciphertext": {
                 "A": ibe.serialize(c['A']),

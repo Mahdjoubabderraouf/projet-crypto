@@ -73,16 +73,6 @@ class IBEService:
         else:
             return self.serialize(obj)  # Use existing base64 serialization
     
-    def load_params_from_env(self):
-        """Load parameters from environment variables"""
-        params = os.getenv("IBE_PARAMS")
-        return params
-    
-    def load_master_key_from_env(self):
-        """Load master key from environment variables"""
-        master_key = os.getenv("IBE_MASTER_KEY")
-        return master_key
-    
     def serialize_key(self, key_dict):
         """Convert private key components to serializable format"""
         return {
@@ -137,6 +127,8 @@ class IBEService:
         e = params['e']
         g = params['g']
         U = params['U']
+        
+        print(e ,"this is e")
 
         #Hash identify to {0,1} based on group and length 'n'
         a = self.hash_to_list(ID,n)

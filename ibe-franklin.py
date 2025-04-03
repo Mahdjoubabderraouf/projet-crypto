@@ -28,7 +28,7 @@ class Boneh_Boyen_IBE:
         g1 = g**alpha # public 
 
         g2 = group.random(G2) # public
-        g2_alpha = g2 ** alpha # 
+        g2_alpha = g2 ** alpha # public
 
         # Select a random hash function key from the family of hash functions
         k = group.random(ZR) 
