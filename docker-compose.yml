@@ -8,4 +8,4 @@ services:
     tty: true # Allocates a pseudo-TTY (-t)
     command: /bin/zsh # ⭐ Runs ZSH on startup
     ports:
-      - "8080:8080" # Maps port 8080 on the host to port 8080 in the container
+      - "8000:8000" # Maps port 8080 on the host to port 8080 in the container
