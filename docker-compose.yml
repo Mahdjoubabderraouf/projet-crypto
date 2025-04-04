@@ -4,6 +4,8 @@ services:
     image: abderraoufmah/my-modified-image:latest
     volumes:
       - ./:/app
-    stdin_open: true  # Keeps STDIN open (-i)
-    tty: true         # Allocates a pseudo-TTY (-t)
-    command: /bin/zsh  # ⭐ Runs ZSH on startup
+    stdin_open: true # Keeps STDIN open (-i)
+    tty: true # Allocates a pseudo-TTY (-t)
+    command: /bin/zsh # ⭐ Runs ZSH on startup
+    ports:
+      - "8080:8080" # Maps port 8080 on the host to port 8080 in the container
