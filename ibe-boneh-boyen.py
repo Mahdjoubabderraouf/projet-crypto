@@ -134,6 +134,8 @@ class Boneh_Boyen_IBE:
             result *= pair(C[i], dID['dn'][i])
         M = A * (result / pair(B, dID['d0']))
 
+        print("M", M)
+
         return M
 
     def hash_to_list(self,strID,n):

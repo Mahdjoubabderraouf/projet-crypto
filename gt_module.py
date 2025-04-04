@@ -4,6 +4,8 @@ from charm.toolbox.symcrypto import SymmetricCryptoAbstraction
 
 group = PairingGroup('SS512')  # Initialize the pairing group
 gt_element = group.random(GT)
+cipher_text=''
+
 
 def convert_text_to_gt(plaintext: str):
     """
@@ -19,28 +21,30 @@ def convert_text_to_gt(plaintext: str):
     symmetric_key = SymmetricCryptoAbstraction(hash_key)
 
     # Encrypt plaintext using AES
-    ciphertext = symmetric_key.encrypt(plaintext_bytes)
+    cipher_text = symmetric_key.encrypt(plaintext_bytes)
 
 # return them in object
     return {
-        "ciphertext": ciphertext,
+        "ciphertext": cipher_text,
         "gt_element": gt_element
     }
 
-def convert_gt_to_text(ciphertext):
+def convert_gt_to_text(decrypted_key):
     """
-    Decrypts ciphertext using the given GT element.
+    Decrypts decrypted_key using the given GT element.
     
-    :param ciphertext: Encrypted message.
-    :param gt_element: GT element used as the key.
+    :param decrypted_key: Encrypted message.
+
     :return: Decrypted plaintext.
     """
     # Derive the symmetric AES key from GT element
-    hash_key = hashlib.sha1(str(gt_element).encode()).digest()
+    
+    
+    hash_key = hashlib.sha1(str(decrypted_key).encode()).digest()
     symmetric_key_dec = SymmetricCryptoAbstraction(hash_key)
 
     # Decrypt the message
-    decrypted_text = symmetric_key_dec.decrypt(ciphertext)
+    decrypted_text = symmetric_key_dec.decrypt(cipher_text)
 
     return decrypted_text.decode()
 

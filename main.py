@@ -15,7 +15,9 @@ load_dotenv()
 group = PairingGroup('SS512')
 
 ibe = IBEService(group)
-params, master_key = ibe.setup()
+
+master_key = ibe.deserialize(os.getenv("MASTER_KEY"))
+params = ibe.deserialize(os.getenv("PARAMS"))
 
 app = FastAPI()
 
@@ -42,7 +44,6 @@ async def encrypt_message(
     try:
         
         M_gt= convert_text_to_gt(request.message)
-
         
         c=ibe.encrypt(params, request.recipient_id, M_gt['gt_element'])
         return{
@@ -62,12 +63,15 @@ async def decrypt_message(request: DecryptRequest):
         private_key_dict = request.private_key.dict()  # Convert to dict
         private_key = ibe.deserialize_key(private_key_dict)
         
-        print("private_key", private_key)
         
         # Deserialize ciphertext components
         A = ibe.deserialize(request.ciphertext.A)
         B = ibe.deserialize(request.ciphertext.B)
         C = [ibe.deserialize(c) for c in request.ciphertext.C]
+        
+        print("A", A)
+        print("B", B)
+        print("C", C)
         
         # Perform decryption
         decrypted = ibe.decrypt(params, private_key, {
@@ -75,7 +79,12 @@ async def decrypt_message(request: DecryptRequest):
             'B': B,
             'C': C
         })
+
         
+        # Convert decrypted GT element to string
+        decrypted_str = convert_gt_to_text(decrypted)
+        
+        print("decrypted_str", decrypted_str)
         
         # Serialize the result before returning
         return {

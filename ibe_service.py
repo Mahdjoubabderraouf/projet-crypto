@@ -62,24 +62,6 @@ class IBEService:
         """Deserialize stored crypto objects"""
         return bytesToObject(base64.b64decode(data.encode('utf-8')), group)
     
-    def ensure_pairing_element(self, obj, element_type=G1):
-        """
-        Convert an integer or other value to a pairing element if needed
-        """
-        # Check if object already belongs to the group
-        # This is a more reliable method than checking the class type
-        if hasattr(obj, 'getGroupType') and obj.getGroupType() is not None:
-            # It's already a group element
-            return obj
-        # Try to convert to ZR first (for integers)
-        if isinstance(obj, int):
-            # Convert to ZR then to the target type
-            zr_elem = group.init(ZR, obj)
-            return group.init(element_type, zr_elem)
-        else:
-            # Try direct conversion
-            return group.init(element_type, obj)
-    
     def serialize_response(self, obj):
         """Serialize crypto objects for API responses"""
         if isinstance(obj, (int, str, float, bool, list, dict)):
@@ -176,9 +158,22 @@ class IBEService:
         C = {}
         for i in range(n):
             C[i] = ((U[i][int(a[i])])**t)
-
+            
+        print({'A':A, 'B':B, 'C':C })
         return {'A':A, 'B':B, 'C':C }
     
+    def ensure_pairing_element(self, obj, element_type=G1):
+        """
+        Convert an integer or other value to a pairing element if needed.
+        """
+        if hasattr(obj, 'getGroupType') and obj.getGroupType() is not None:
+            # The object is already a group element
+            return obj
+        if isinstance(obj, int):
+            # Convert an integer to ZR and then to the target element type (G1, G2, GT)
+            zr_elem = group.init(ZR, obj)
+            return group.init(element_type, zr_elem)
+        return group.init(element_type, obj)
 
     def decrypt(self, params, dID, cipher_text):
         """
@@ -192,32 +187,33 @@ class IBEService:
         Returns:
             GT: Decrypted message.
         """
-        # Initialize result as identity element in GT
-        result = group.init(GT, 1)
+        result = 1
         n = params['n']
 
-        # Parts of Cipher Text
+        # Extract parts of Cipher Text
         A = cipher_text['A']
         B = cipher_text['B']
         C = cipher_text['C']
         
+        # # Ensure all elements are proper pairing elements
+        # A = self.ensure_pairing_element(A, GT)
+        # B = self.ensure_pairing_element(B, G1)
         
-        # Ensure all elements are proper pairing elements
-        A = self.ensure_pairing_element(A, GT)
-        B = self.ensure_pairing_element(B, G1)
-        
-        # Make sure each C element is a pairing element
-        for i in range(n):
-            C[i] = self.ensure_pairing_element(C[i], G1)
+        # # Ensure each C element is a pairing element
+        # for i in range(n):
+        #     C[i] = self.ensure_pairing_element(C[i], G1)
             
 
-        # Operations for decrypted cipher text
+        # Perform decryption operations
         for i in range(n):
-            result *= pair(C[i], dID['dn'][i])
-            
-        M = A * (result / pair(B, dID['d0']))
+            result *= pair(C[i], dID['dn'][i])  # Pairing operation on C[i] and dID['dn'][i]
+        
+        M = A * (result / pair(B, dID['d0']))  # Final decryption step using A, B, and result
 
+        # Return the decrypted message (it will be a pairing element in GT)
         return M
+
+
 
     
     def hash_to_list(self,strID,n):
